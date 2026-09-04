@@ -1,0 +1,127 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap");
+@import "tailwindcss";
+
+@theme {
+  /* Professional palette: deep navy/blue primary, slate neutrals, amber accent. */
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-forest-950: #0b1220;
+  --color-forest-900: #131f35;
+  --color-forest-800: #1e3a8a;
+  --color-forest-700: #2563eb;
+  --color-forest-600: #3b82f6;
+
+  --color-paper-50: #ffffff;
+  --color-paper-100: #f4f6f9;
+  --color-paper-200: #e9edf3;
+  --color-paper-300: #dbe1ea;
+
+  --color-ink-900: #0f172a;
+  --color-ink-700: #47536b;
+  --color-ink-500: #8592a8;
+
+  --color-brass-400: #fbbf24;
+  --color-brass-500: #f59e0b;
+  --color-brass-600: #d97706;
+
+  --color-clay-500: #e11d48;
+  --color-clay-600: #be123c;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: var(--color-paper-100);
+  color: var(--color-ink-900);
+}
+
+/* Wallpaper: layered soft gradients + a faint dot grid, fixed to the viewport
+   so it doesn't scroll with the page. Sits behind everything. */
+.app-wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--color-paper-100);
+  background-image:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--color-forest-700) 14%, transparent), transparent 42%),
+    radial-gradient(circle at 88% 6%, color-mix(in srgb, var(--color-brass-500) 16%, transparent), transparent 40%),
+    radial-gradient(circle at 50% 105%, color-mix(in srgb, var(--color-forest-800) 10%, transparent), transparent 55%),
+    radial-gradient(circle, color-mix(in srgb, var(--color-ink-500) 14%, transparent) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 22px 22px;
+  background-position: 0 0, 0 0, 0 0, 0 0;
+}
+
+/* Soft scrim above the wallpaper so cards/text stay easy to read */
+.app-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-paper-50) 55%, transparent) 0%,
+    color-mix(in srgb, var(--color-paper-100) 75%, transparent) 100%
+  );
+}
+
+/* Fade + rise transition for page content on load / route change */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-enter {
+  animation: pageEnter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-tag {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* Resource card: clean rounded surface with a soft shadow that lifts on hover */
+.catalog-card {
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.catalog-card:hover {
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+/* Due-date badge used on borrowed items */
+.stamp {
+  border-radius: 999px;
+  background: currentColor;
+}
+.stamp {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brass-500);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

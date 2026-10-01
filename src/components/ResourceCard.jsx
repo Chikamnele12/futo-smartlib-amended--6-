@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Star, Download, BookOpen, Bookmark, RefreshCcw, Flag, MessageSquarePlus } from "lucide-react";
 import { getFileUrl, incrementDownload } from "../lib/useResources";
-import { borrowResource } from "../lib/borrow";
+import { borrowResource, addDays, toInputDate, BORROW_DAYS, MAX_BORROW_DAYS } from "../lib/borrow";
 import { useAuth } from "../lib/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
@@ -16,11 +16,14 @@ const COVER_GRADIENTS = [
 export default function ResourceCard({ resource, index = 0, onOpen }) {
   const { profile, isStaff } = useAuth();
   const cover = COVER_GRADIENTS[index % COVER_GRADIENTS.length];
-  const [panel, setPanel] = useState(null); // null | "report" | "remark"
+  const [panel, setPanel] = useState(null); // null | "report" | "remark" | "borrow"
+  const [returnDate, setReturnDate] = useState(toInputDate(addDays(BORROW_DAYS)));
+  const [isError, setIsError] = useState(false);
   const [text, setText] = useState("");
   const [rating, setRating] = useState(5);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [receipt, setReceipt] = useState(null); // { ref, due } after a successful borrow
 
   async function handleOpen() {
     const url = await getFileUrl("resource-files", resource.file_path);
@@ -31,13 +34,29 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
 
   const outOfStock = resource.type === "academic_book" && (resource.available_copies ?? 1) <= 0;
 
-  async function handleBorrow() {
-    if (!profile || outOfStock) return;
+  async function handleBorrow(e) {
+    e?.preventDefault();
+    if (outOfStock) return;
+    if (profile && (!profile.phone || !profile.level)) {
+      setIsError(true);
+      setMsg("Please add your level and phone number to your profile before borrowing.");
+      return;
+    }
+    if (!profile) {
+      setIsError(true);
+      setMsg("Your profile could not be loaded. Please sign out and sign in again.");
+      return;
+    }
     setBusy(true);
     setMsg("");
-    const { error } = await borrowResource(resource, profile);
+    const { data, error } = await borrowResource(resource, profile, returnDate);
     setBusy(false);
-    setMsg(error ? error.message : "Borrowed! Check your email for the due date and penalty details.");
+    setIsError(!!error);
+    setMsg(error ? error.message : "");
+    if (!error) {
+      setPanel(null);
+      setReceipt({ ref: data.borrow_ref, due: data.due_date });
+    }
   }
 
   async function submitReport(e) {
@@ -117,11 +136,11 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
 
         {!isStaff && resource.type === "academic_book" && (
           <button
-            onClick={handleBorrow}
+            onClick={() => { setPanel(panel === "borrow" ? null : "borrow"); setMsg(""); }}
             disabled={busy || outOfStock}
             className="mt-2 flex items-center justify-center gap-2 text-sm border border-brand-700 text-brand-700 hover:bg-brand-700 hover:text-white rounded-md py-2 transition-colors disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-brand-700"
           >
-            <RefreshCcw size={14} /> {outOfStock ? "Out of stock" : busy ? "Borrowing..." : "Borrow this book"}
+            <RefreshCcw size={14} /> {outOfStock ? "Out of stock" : busy ? "Borrowing..." : panel === "borrow" ? "Cancel" : "Borrow this book"}
           </button>
         )}
 
@@ -140,6 +159,29 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
               <MessageSquarePlus size={12} /> Remark
             </button>
           </div>
+        )}
+
+        {panel === "borrow" && (
+          <form onSubmit={handleBorrow} className="mt-2 space-y-2 border border-paper-300 rounded-md p-3 bg-paper-100">
+            <label className="block text-xs font-medium text-ink-700">
+              Return date
+              <input
+                type="date"
+                required
+                value={returnDate}
+                min={toInputDate(addDays(1))}
+                max={toInputDate(addDays(MAX_BORROW_DAYS))}
+                onChange={(e) => setReturnDate(e.target.value)}
+                className="mt-1 w-full text-sm border border-paper-300 rounded-md px-2 py-1.5 outline-none focus:border-brand-500 bg-white"
+              />
+            </label>
+            <p className="text-[11px] text-ink-500">
+              You can keep it for up to {MAX_BORROW_DAYS} days. Returning after this date costs ₦500 per day.
+            </p>
+            <button type="submit" disabled={busy} className="w-full text-xs btn-primary rounded-md px-3 py-2 disabled:opacity-60">
+              {busy ? "Borrowing..." : "Confirm borrow"}
+            </button>
+          </form>
         )}
 
         {panel === "report" && (
@@ -173,7 +215,16 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
           </form>
         )}
 
-        {msg && <p className="mt-2 text-[11px] text-green-ink">{msg}</p>}
+        {receipt && (
+          <div className="mt-2 border border-green-ink/30 bg-paper-100 rounded-md p-3 text-center">
+            <p className="text-[11px] text-ink-700">Borrowed! Give this reference to the librarian for payment and return:</p>
+            <p className="font-mono-tag text-lg font-bold text-brand-700 tracking-wider my-1 select-all">{receipt.ref}</p>
+            <p className="text-[11px] text-ink-500">Due {new Date(receipt.due).toLocaleDateString()} · also sent to your email</p>
+            <button onClick={() => setReceipt(null)} className="mt-1 text-[11px] underline text-ink-500">Dismiss</button>
+          </div>
+        )}
+
+        {msg && <p className={`mt-2 text-[11px] ${isError ? "text-rose-ink" : "text-green-ink"}`}>{msg}</p>}
       </div>
     </div>
   );

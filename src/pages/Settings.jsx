@@ -14,6 +14,7 @@ export default function Settings() {
   const [department, setDepartment] = useState("");
   const [level, setLevel] = useState("");
   const [matric, setMatric] = useState("");
+  const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -27,6 +28,7 @@ export default function Settings() {
       setDepartment(profile.department || "");
       setLevel(profile.level || "");
       setMatric(profile.matric_number || "");
+      setPhone(profile.phone || "");
     }
   }, [profile]);
 
@@ -36,7 +38,7 @@ export default function Settings() {
     setSaved(false);
     await supabase
       .from("profiles")
-      .update({ full_name: fullName, department, level, matric_number: matric })
+      .update({ full_name: fullName, department, level, matric_number: matric, phone })
       .eq("id", profile.id);
     await refreshProfile();
     setSaving(false);
@@ -104,8 +106,16 @@ export default function Settings() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-ink-700">Level</label>
-                  <input value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass} />
+                  <select value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass}>
+                    <option value="">Select level</option>
+                    {["100", "200", "300", "400", "500"].map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700">Phone number</label>
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08012345678" className={inputClass} />
               </div>
 
               <p className="text-xs text-ink-500">Email: {profile?.email}</p>

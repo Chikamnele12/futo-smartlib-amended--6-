@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, User, ArrowRight, Hash, Building2, CheckCircle2 } from "lucide-react";
+import { Mail, User, ArrowRight, Hash, Building2, CheckCircle2, GraduationCap, Phone } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import Logo from "../components/Logo";
 
@@ -14,6 +14,8 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [matric, setMatric] = useState("");
   const [department, setDepartment] = useState("");
+  const [level, setLevel] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -21,12 +23,16 @@ export default function Signup() {
   async function sendLink(e) {
     e.preventDefault();
     setError("");
+    const cleanPhone = phone.replace(/[\s-]/g, "");
+    if (!/^(\+?234|0)[789]\d{9}$/.test(cleanPhone)) {
+      return setError("Enter a valid Nigerian phone number, e.g. 08012345678.");
+    }
     setLoading(true);
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
-        data: { full_name: fullName, matric_number: matric, department },
+        data: { full_name: fullName, matric_number: matric, department, level, phone: cleanPhone },
         emailRedirectTo: `${window.location.origin}/complete-signup`,
       },
     });
@@ -93,10 +99,28 @@ export default function Signup() {
               </div>
 
               <label className="text-sm font-medium text-ink-700">Department</label>
-              <div className="mt-1.5 mb-3 flex items-center gap-2 border border-paper-300 rounded-lg px-3 py-2.5 transition-colors focus-within:border-brand-500">
+              <div className="mt-1.5 mb-4 flex items-center gap-2 border border-paper-300 rounded-lg px-3 py-2.5 transition-colors focus-within:border-brand-500">
                 <Building2 size={16} className="text-ink-500" />
                 <input required value={department} onChange={(e) => setDepartment(e.target.value)}
                   placeholder="e.g. Computer Science"
+                  className="w-full bg-transparent outline-none text-sm text-ink-900 placeholder-ink-500" />
+              </div>
+
+              <label className="text-sm font-medium text-ink-700">Level</label>
+              <div className="mt-1.5 mb-4 flex items-center gap-2 border border-paper-300 rounded-lg px-3 py-2.5 transition-colors focus-within:border-brand-500">
+                <GraduationCap size={16} className="text-ink-500" />
+                <select required value={level} onChange={(e) => setLevel(e.target.value)}
+                  className="w-full bg-transparent outline-none text-sm text-ink-900">
+                  <option value="">Select your level</option>
+                  {["100", "200", "300", "400", "500"].map((l) => <option key={l} value={l}>{l} Level</option>)}
+                </select>
+              </div>
+
+              <label className="text-sm font-medium text-ink-700">Phone number</label>
+              <div className="mt-1.5 mb-3 flex items-center gap-2 border border-paper-300 rounded-lg px-3 py-2.5 transition-colors focus-within:border-brand-500">
+                <Phone size={16} className="text-ink-500" />
+                <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 08012345678"
                   className="w-full bg-transparent outline-none text-sm text-ink-900 placeholder-ink-500" />
               </div>
 

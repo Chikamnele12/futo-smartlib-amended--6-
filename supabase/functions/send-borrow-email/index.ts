@@ -1,74 +1,59 @@
 // Supabase Edge Function: send-borrow-email
-// Deploy with:  supabase functions deploy send-borrow-email
-// Set secret:   supabase secrets set RESEND_API_KEY=your_resend_key
-//
-// Sends the student an email confirming the book they borrowed, their
-// matric number/department, the due date, and the ₦500/day penalty.
+// Called from the browser right after a student borrows a book.
+// Deploy:  supabase functions deploy send-borrow-email
+// Secrets: supabase secrets set RESEND_API_KEY=... EMAIL_FROM="SmartLib <library@yourdomain.com>"
 
-// @ts-ignore - Deno remote import, resolved at deploy time
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import {
+  callout, corsHeaders, detailsTable, esc, formatDate, json, layout, naira, sendMails,
+} from "../_shared/email.ts";
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const FROM_EMAIL = Deno.env.get("BORROW_EMAIL_FROM") || "SmartLib <library@yourdomain.com>";
+Deno.serve(async (req) => {
+  // Browser preflight — without this, supabase.functions.invoke() fails.
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-serve(async (req) => {
   try {
-    const { to, full_name, matric_number, department, book_title, due_date, penalty_per_day } = await req.json();
+    const { to, full_name, matric_number, department, level, phone, borrow_ref, book_title, due_date, penalty_per_day } =
+      await req.json();
 
-    if (!to || !book_title) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400 });
+    if (!to || !book_title || !due_date) return json({ error: "Missing required fields" }, 400);
+
+    const html = layout(
+      "Borrow confirmation",
+      `<p>Hi ${esc(full_name || "there")},</p>
+       <p>You have successfully borrowed:</p>
+       ${detailsTable([
+         ["Reference", `<b style="font-size:18px;letter-spacing:1px;">${esc(borrow_ref || "—")}</b>`],
+         ["Book", `<b>${esc(book_title)}</b>`],
+         ["Department", esc(department || "—")],
+         ["Level", esc(level ? `${level} Level` : "—")],
+         ["Matric No.", esc(matric_number || "—")],
+         ["Phone", esc(phone || "—")],
+         ["Due date", `<b>${esc(formatDate(due_date))}</b>`],
+       ])}
+       ${callout(
+         `Please return it by the due date. A penalty of <b>${esc(naira(penalty_per_day ?? 500))} per day</b> applies for every day it is late. You will get a reminder before it is due.`,
+         "#eef2ff",
+         "#6366f1",
+       )}
+       ${callout(
+         `Keep your reference <b>${esc(borrow_ref || "")}</b>. Payment of any late fee is made in person at the library. Give this reference to the librarian when you pay or return the book, and they will mark it as returned.`,
+         "#ecfdf5",
+         "#10b981",
+       )}
+       <p>— FUTO SmartLib</p>`,
+    );
+
+    const result = await sendMails([
+      { to, subject: `Borrow confirmation: ${book_title}`, html },
+    ]);
+
+    if (result.skipped) {
+      console.log("RESEND_API_KEY not set — email skipped for", to);
+      return json({ skipped: true });
     }
-
-    const dueDateStr = new Date(due_date).toLocaleDateString("en-NG", {
-      year: "numeric", month: "long", day: "numeric",
-    });
-
-    const html = `
-      <div style="font-family: Georgia, serif; max-width: 480px; margin: auto; color: #1a1a1a;">
-        <h2>FUTO SmartLib — Borrow Confirmation</h2>
-        <p>Hi ${full_name || "there"},</p>
-        <p>You have successfully borrowed the following item:</p>
-        <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-          <tr><td style="padding:6px 0; color:#555;">Book</td><td style="padding:6px 0;"><b>${book_title}</b></td></tr>
-          <tr><td style="padding:6px 0; color:#555;">Department</td><td style="padding:6px 0;">${department || "—"}</td></tr>
-          <tr><td style="padding:6px 0; color:#555;">Matric No.</td><td style="padding:6px 0;">${matric_number || "—"}</td></tr>
-          <tr><td style="padding:6px 0; color:#555;">Due date</td><td style="padding:6px 0;"><b>${dueDateStr}</b></td></tr>
-        </table>
-        <p style="background:#fdf2ec; border-left:3px solid #b5561f; padding:10px 14px;">
-          Please return this book by the due date. A penalty of <b>₦${penalty_per_day} per day</b>
-          applies for every day the book is returned late.
-        </p>
-        <p>— FUTO SmartLib</p>
-      </div>
-    `;
-
-    if (!RESEND_API_KEY) {
-      // No email provider configured yet — log instead of failing the borrow.
-      console.log("RESEND_API_KEY not set. Would have sent:", { to, html });
-      return new Response(JSON.stringify({ skipped: true }), { status: 200 });
-    }
-
-    const resendResp = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
-        to: [to],
-        subject: `Borrow confirmation: ${book_title}`,
-        html,
-      }),
-    });
-
-    if (!resendResp.ok) {
-      const errText = await resendResp.text();
-      return new Response(JSON.stringify({ error: errText }), { status: 500 });
-    }
-
-    return new Response(JSON.stringify({ sent: true }), { status: 200 });
+    if (result.failed) return json({ error: result.lastError || "Send failed" }, 502);
+    return json({ sent: true });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return json({ error: (err as Error).message }, 500);
   }
 });

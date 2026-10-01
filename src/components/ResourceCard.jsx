@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Star, Download, BookOpen, Bookmark, RefreshCcw, Flag, MessageSquarePlus } from "lucide-react";
+import { Star, Download, BookOpen, Bookmark, RefreshCcw, Flag, MessageSquarePlus, Trash2 } from "lucide-react";
 import { getFileUrl, incrementDownload } from "../lib/useResources";
 import { borrowResource, addDays, toInputDate, BORROW_DAYS, MAX_BORROW_DAYS } from "../lib/borrow";
 import { useAuth } from "../lib/AuthContext";
@@ -13,7 +13,7 @@ const COVER_GRADIENTS = [
   "from-emerald-600 to-teal-800",
 ];
 
-export default function ResourceCard({ resource, index = 0, onOpen }) {
+export default function ResourceCard({ resource, index = 0, onOpen, onDeleted }) {
   const { profile, isStaff } = useAuth();
   const cover = COVER_GRADIENTS[index % COVER_GRADIENTS.length];
   const [panel, setPanel] = useState(null); // null | "report" | "remark" | "borrow"
@@ -24,6 +24,7 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [receipt, setReceipt] = useState(null); // { ref, due } after a successful borrow
+  const [deleted, setDeleted] = useState(false);
 
   async function handleOpen() {
     const url = await getFileUrl("resource-files", resource.file_path);
@@ -59,6 +60,32 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
     }
   }
 
+  async function handleDelete() {
+    setBusy(true);
+    setMsg("");
+    setIsError(false);
+
+    // delete the database row first; if loans or other records block it, we stop before touching the file
+    const { error } = await supabase.from("resources").delete().eq("id", resource.id);
+    if (error) {
+      setBusy(false);
+      setIsError(true);
+      setMsg(
+        error.code === "23503"
+          ? "This book has borrow records and can't be deleted."
+          : error.message || "Could not delete this resource."
+      );
+      return;
+    }
+
+    if (resource.file_path) {
+      await supabase.storage.from("resource-files").remove([resource.file_path]);
+    }
+    setBusy(false);
+    setDeleted(true);
+    onDeleted?.(resource);
+  }
+
   async function submitReport(e) {
     e.preventDefault();
     if (!text.trim()) return;
@@ -83,6 +110,8 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
     setPanel(null);
     setMsg("Thanks for your remark!");
   }
+
+  if (deleted) return null;
 
   return (
     <div className="card card-hover overflow-hidden flex flex-col">
@@ -133,6 +162,31 @@ export default function ResourceCard({ resource, index = 0, onOpen }) {
         >
           <BookOpen size={14} /> Open resource
         </button>
+
+        {isStaff && (
+          <button
+            onClick={() => { setPanel(panel === "delete" ? null : "delete"); setMsg(""); }}
+            disabled={busy}
+            className="mt-2 flex items-center justify-center gap-2 text-sm border border-rose-ink text-rose-ink hover:bg-rose-ink hover:text-white rounded-md py-2 transition-colors disabled:opacity-60"
+          >
+            <Trash2 size={14} /> {panel === "delete" ? "Cancel" : "Delete"}
+          </button>
+        )}
+
+        {isStaff && panel === "delete" && (
+          <div className="mt-2 border border-rose-ink/40 rounded-md p-3 bg-paper-100 space-y-2">
+            <p className="text-xs text-ink-700">
+              Delete <span className="font-semibold">{resource.title}</span> permanently? The file will be removed too.
+            </p>
+            <button
+              onClick={handleDelete}
+              disabled={busy}
+              className="w-full text-xs bg-rose-ink text-white rounded-md px-3 py-2 disabled:opacity-60"
+            >
+              {busy ? "Deleting..." : "Yes, delete"}
+            </button>
+          </div>
+        )}
 
         {!isStaff && resource.type === "academic_book" && (
           <button

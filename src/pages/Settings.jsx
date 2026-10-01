@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { Lock, LogOut, Info } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Lock, LogOut, Info, Camera, Trash2 } from "lucide-react";
 import Layout from "../components/Layout";
 import { useAuth } from "../lib/AuthContext";
 import { supabase } from "../lib/supabaseClient";
+import Avatar from "../components/Avatar";
 
 const TABS = ["Account Settings", "Security"];
 
@@ -21,6 +22,62 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMessage, setPwMessage] = useState(null);
+
+  const fileRef = useRef(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState(null);
+
+  async function shrinkImage(file, max = 400) {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    return new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+  }
+
+  async function handleAvatarPick(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setAvatarMsg(null);
+    if (!file.type.startsWith("image/")) {
+      setAvatarMsg({ type: "error", text: "Please choose an image file." });
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setAvatarMsg({ type: "error", text: "Image is too large. Choose one under 8 MB." });
+      return;
+    }
+    setAvatarBusy(true);
+    try {
+      const blob = await shrinkImage(file);
+      const path = `${profile.id}/avatar.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("avatars")
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+      const url = `${data.publicUrl}?v=${Date.now()}`;
+      const { error: dbErr } = await supabase.from("profiles").update({ avatar_url: url }).eq("id", profile.id);
+      if (dbErr) throw dbErr;
+      await refreshProfile();
+      setAvatarMsg({ type: "success", text: "Profile photo updated." });
+    } catch (err) {
+      setAvatarMsg({ type: "error", text: err.message || "Upload failed. Try again." });
+    }
+    setAvatarBusy(false);
+  }
+
+  async function handleAvatarRemove() {
+    setAvatarBusy(true);
+    setAvatarMsg(null);
+    await supabase.storage.from("avatars").remove([`${profile.id}/avatar.jpg`]);
+    await supabase.from("profiles").update({ avatar_url: null }).eq("id", profile.id);
+    await refreshProfile();
+    setAvatarBusy(false);
+  }
 
   useEffect(() => {
     if (profile) {
@@ -87,6 +144,39 @@ export default function Settings() {
 
           {tab === "Account Settings" && (
             <form onSubmit={handleSave} className="card p-6 space-y-4">
+              <div className="flex items-center gap-4">
+                <Avatar profile={profile} size={72} />
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={avatarBusy}
+                      onClick={() => fileRef.current?.click()}
+                      className="btn-primary disabled:opacity-60 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
+                    >
+                      <Camera size={15} /> {avatarBusy ? "Working..." : profile?.avatar_url ? "Change photo" : "Add photo"}
+                    </button>
+                    {profile?.avatar_url && (
+                      <button
+                        type="button"
+                        disabled={avatarBusy}
+                        onClick={handleAvatarRemove}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-rose-ink hover:bg-rose-soft transition-colors"
+                      >
+                        <Trash2 size={15} /> Remove
+                      </button>
+                    )}
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={handleAvatarPick} className="hidden" />
+                  <p className="text-xs text-ink-500">JPG or PNG. It is resized automatically.</p>
+                </div>
+              </div>
+              {avatarMsg && (
+                <p className={`text-sm rounded-md px-3 py-2 ${avatarMsg.type === "error" ? "text-rose-ink bg-rose-soft" : "text-green-ink bg-green-soft"}`}>
+                  {avatarMsg.text}
+                </p>
+              )}
+
               {saved && <p className="text-sm text-green-ink bg-green-soft rounded-md px-3 py-2">Profile updated</p>}
 
               <div>

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, Bell, ChevronDown, Menu } from "lucide-react";
 import { useAuth } from "../lib/AuthContext";
+import Avatar from "./Avatar";
+import ThemeToggle from "./ThemeToggle";
 import { supabase } from "../lib/supabaseClient";
 
 export default function TopBar({ placeholder, onMenu = () => {} }) {
@@ -18,9 +20,6 @@ export default function TopBar({ placeholder, onMenu = () => {} }) {
       .eq("is_read", false)
       .then(({ count }) => setUnread(count || 0));
   }, [user]);
-
-  const initials = (profile?.full_name || profile?.email || "?")
-    .split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
   return (
     <header className="h-16 bg-paper-50 border-b border-paper-300 flex items-center gap-3 sm:gap-4 px-3 sm:px-5 sticky top-0 z-20">
@@ -41,6 +40,8 @@ export default function TopBar({ placeholder, onMenu = () => {} }) {
       </div>
 
       <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
+        <ThemeToggle />
+
         <Link to="/notifications" className="relative text-ink-500 hover:text-brand-700 transition-colors" aria-label="Notifications">
           <Bell size={19} />
           {unread > 0 && (
@@ -52,9 +53,7 @@ export default function TopBar({ placeholder, onMenu = () => {} }) {
 
         <div className="relative">
           <button onClick={() => setMenuOpen((v) => !v)} className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-brand-700 text-white flex items-center justify-center text-sm font-semibold">
-              {initials}
-            </div>
+            <Avatar profile={profile} size={36} />
             <div className="text-sm hidden sm:block text-left">
               <p className="font-semibold text-ink-900 leading-tight">{profile?.full_name || "My Account"}</p>
               <p className="text-xs text-ink-500 capitalize">{profile?.role || "student"}</p>

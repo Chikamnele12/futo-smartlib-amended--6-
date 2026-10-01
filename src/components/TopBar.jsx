@@ -4,7 +4,7 @@ import { Search, Bell, ChevronDown, Menu } from "lucide-react";
 import { useAuth } from "../lib/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
-export default function TopBar({ placeholder }) {
+export default function TopBar({ placeholder, onMenu = () => {} }) {
   const { profile, user, signOut } = useAuth();
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -23,20 +23,24 @@ export default function TopBar({ placeholder }) {
     .split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
   return (
-    <header className="h-16 bg-paper-50 border-b border-paper-300 flex items-center gap-4 px-5 sticky top-0 z-20">
-      <button className="text-ink-500 hover:text-ink-900 transition-colors" aria-label="Menu">
-        <Menu size={20} />
+    <header className="h-16 bg-paper-50 border-b border-paper-300 flex items-center gap-3 sm:gap-4 px-3 sm:px-5 sticky top-0 z-20">
+      <button
+        onClick={onMenu}
+        className="lg:hidden shrink-0 text-ink-500 hover:text-ink-900 transition-colors"
+        aria-label="Open menu"
+      >
+        <Menu size={22} />
       </button>
 
-      <div className="flex items-center gap-2 bg-paper-100 border border-paper-300 rounded-lg px-3 py-2 flex-1 max-w-xl transition-colors focus-within:border-brand-500">
-        <Search size={16} className="text-ink-500" />
+      <div className="flex items-center gap-2 bg-paper-100 border border-paper-300 rounded-lg px-3 py-2 flex-1 min-w-0 max-w-xl transition-colors focus-within:border-brand-500">
+        <Search size={16} className="text-ink-500 shrink-0" />
         <input
           placeholder={placeholder || "Search for resources, course, author, department..."}
-          className="bg-transparent outline-none text-sm w-full text-ink-900 placeholder-ink-500"
+          className="bg-transparent outline-none text-sm w-full min-w-0 text-ink-900 placeholder-ink-500"
         />
       </div>
 
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
         <Link to="/notifications" className="relative text-ink-500 hover:text-brand-700 transition-colors" aria-label="Notifications">
           <Bell size={19} />
           {unread > 0 && (
@@ -55,7 +59,7 @@ export default function TopBar({ placeholder }) {
               <p className="font-semibold text-ink-900 leading-tight">{profile?.full_name || "My Account"}</p>
               <p className="text-xs text-ink-500 capitalize">{profile?.role || "student"}</p>
             </div>
-            <ChevronDown size={14} className={`text-ink-500 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+            <ChevronDown size={14} className={`hidden sm:block text-ink-500 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
           </button>
 
           {menuOpen && (

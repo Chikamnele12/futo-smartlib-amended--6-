@@ -4,6 +4,7 @@ import { getFileUrl, incrementDownload } from "../lib/useResources";
 import { borrowResource, addDays, toInputDate, BORROW_DAYS, MAX_BORROW_DAYS } from "../lib/borrow";
 import { useAuth } from "../lib/AuthContext";
 import { supabase } from "../lib/supabaseClient";
+import { coverUrl, COVER_TYPES, COVER_BUCKET } from "../lib/image";
 
 const COVER_GRADIENTS = [
   "from-indigo-600 to-violet-800",
@@ -25,6 +26,9 @@ export default function ResourceCard({ resource, index = 0, onOpen, onDeleted })
   const [msg, setMsg] = useState("");
   const [receipt, setReceipt] = useState(null); // { ref, due } after a successful borrow
   const [deleted, setDeleted] = useState(false);
+  const [coverOk, setCoverOk] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const showCover = COVER_TYPES.includes(resource.type) && !coverFailed;
 
   async function handleOpen() {
     const url = await getFileUrl("resource-files", resource.file_path);
@@ -81,6 +85,9 @@ export default function ResourceCard({ resource, index = 0, onOpen, onDeleted })
     if (resource.file_path) {
       await supabase.storage.from("resource-files").remove([resource.file_path]);
     }
+    if (COVER_TYPES.includes(resource.type)) {
+      await supabase.storage.from(COVER_BUCKET).remove([`${resource.id}.jpg`]);
+    }
     setBusy(false);
     setDeleted(true);
     onDeleted?.(resource);
@@ -115,10 +122,23 @@ export default function ResourceCard({ resource, index = 0, onOpen, onDeleted })
 
   return (
     <div className="card card-hover overflow-hidden flex flex-col">
-      <div className={`h-32 bg-gradient-to-br ${cover} relative flex items-start justify-between p-3`}>
-        <p className="font-display font-bold text-white text-base leading-snug pr-6">{resource.title}</p>
+      <div className={`h-40 bg-gradient-to-br ${cover} relative overflow-hidden flex items-start justify-between p-3`}>
+        {showCover && (
+          <img
+            src={coverUrl(resource.id)}
+            alt=""
+            loading="lazy"
+            onLoad={() => setCoverOk(true)}
+            onError={() => setCoverFailed(true)}
+            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+            style={{ opacity: coverOk ? 1 : 0 }}
+          />
+        )}
+        {!coverOk && (
+          <p className="relative font-display font-bold text-white text-base leading-snug pr-6">{resource.title}</p>
+        )}
         <button
-          className="w-7 h-7 shrink-0 bg-white/90 rounded-md flex items-center justify-center"
+          className="relative ml-auto w-7 h-7 shrink-0 bg-white/90 rounded-md flex items-center justify-center"
           aria-label="Save to bookmarks"
         >
           <Bookmark size={13} className="text-ink-900" />
@@ -126,6 +146,7 @@ export default function ResourceCard({ resource, index = 0, onOpen, onDeleted })
       </div>
 
       <div className="p-4 flex-1 flex flex-col">
+        {coverOk && <p className="text-sm font-semibold text-ink-900 leading-snug mb-1">{resource.title}</p>}
         <p className="text-sm text-ink-700 mb-2">{resource.author || "Unknown author"}</p>
 
         <div className="flex items-center gap-2 mb-2 flex-wrap">

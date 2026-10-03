@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import BottomNav from "./BottomNav";
+import AssistantWidget from "./AssistantWidget";
 import "../lib/theme";
 
 export default function Layout({ searchPlaceholder, children }) {
@@ -62,6 +63,7 @@ export default function Layout({ searchPlaceholder, children }) {
         </main>
       </div>
       <BottomNav onMore={() => setNavOpen(true)} />
+      <AssistantWidget />
     </div>
   );
 }

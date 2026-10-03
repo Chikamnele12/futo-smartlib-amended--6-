@@ -4,6 +4,8 @@ import Layout from "../components/Layout";
 import { useAuth } from "../lib/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { feeOwed } from "../lib/borrow";
+import LoanTimeline from "../components/LoanTimeline";
+import { SkeletonRow } from "../components/Skeleton";
 
 function StatCard({ icon: Icon, value, label, bg, ink }) {
   return (
@@ -87,6 +89,7 @@ export default function BorrowedItems() {
       .some((v) => (v || "").toLowerCase().includes(q)));
 
   const dueSoonList = items.filter(isDueSoon).slice(0, 3);
+  const overdueFines = items.filter(isOverdue).reduce((sum, i) => sum + feeOwed(i), 0);
 
   return (
     <Layout searchPlaceholder="Search borrowed items...">
@@ -94,6 +97,13 @@ export default function BorrowedItems() {
         <h1 className="font-display text-2xl font-bold text-ink-900">Borrowed Items</h1>
         <p className="text-sm text-ink-500">Home &gt; Borrowed Items</p>
       </div>
+
+      {!isStaff && stats.overdue > 0 && (
+        <div className="rounded-lg border border-rose-ink/30 bg-rose-soft text-rose-ink text-sm px-4 py-3">
+          You have {stats.overdue} overdue book{stats.overdue === 1 ? "" : "s"}. Late fees of ₦{overdueFines.toLocaleString()} are
+          owed so far and grow daily. Pay in person at the library and show your borrow reference.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard icon={BookOpen} value={stats.borrowed} label="Currently Borrowed" bg="bg-brand-100" ink="text-brand-700" />
@@ -116,7 +126,11 @@ export default function BorrowedItems() {
               {actionError && <p className="mt-2 text-xs text-rose-ink">{actionError}</p>}
             </div>
           )}
-          {loading && <p className="text-sm text-ink-500 p-4">Loading...</p>}
+          {loading && (
+            <div className="divide-y divide-paper-200">
+              <SkeletonRow /><SkeletonRow /><SkeletonRow />
+            </div>
+          )}
           {!loading && visibleItems.length === 0 && <p className="text-sm text-ink-500 p-4">{q ? "No loan matches that reference." : "Nothing on loan."}</p>}
 
           <div className="divide-y divide-paper-200">
@@ -158,6 +172,8 @@ export default function BorrowedItems() {
                       </button>
                     )}
                   </div>
+
+                  {!isStaff && <LoanTimeline item={item} />}
                 </div>
               );
             })}

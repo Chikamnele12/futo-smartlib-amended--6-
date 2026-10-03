@@ -242,7 +242,19 @@ body {
   outline-offset: 2px;
 }
 
+/* Loading placeholders */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-paper-200) 25%, var(--color-paper-300) 50%, var(--color-paper-200) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .blob, .skeleton { animation: none !important; }
   .reveal { opacity: 1; translate: 0 0; }
 }

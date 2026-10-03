@@ -33,6 +33,15 @@ export default function ResourceCard({ resource, index = 0, onOpen, onDeleted })
   async function handleOpen() {
     const url = await getFileUrl("resource-files", resource.file_path);
     incrementDownload(resource.id, resource.downloads_count);
+    if (profile?.id) {
+      supabase
+        .from("reading_activity")
+        .upsert(
+          { user_id: profile.id, resource_id: String(resource.id), opened_on: toInputDate(new Date()) },
+          { onConflict: "user_id,resource_id,opened_on", ignoreDuplicates: true }
+        )
+        .then(() => {});
+    }
     if (url) window.open(url, "_blank", "noopener,noreferrer");
     onOpen?.(resource);
   }

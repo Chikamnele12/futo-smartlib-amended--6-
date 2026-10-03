@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Lock, LogOut, Info, Camera, Trash2 } from "lucide-react";
 import Layout from "../components/Layout";
+import ReadingStats from "../components/ReadingStats";
 import { useAuth } from "../lib/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import Avatar from "../components/Avatar";
@@ -238,6 +239,8 @@ export default function Settings() {
         </div>
 
         <div className="space-y-4">
+          <ReadingStats />
+
           <div className="card p-5">
             <div className="flex items-center gap-2 mb-3">
               <Info size={16} className="text-ink-500" />

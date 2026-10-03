@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { SlidersHorizontal, LayoutGrid, List } from "lucide-react";
 import Layout from "../components/Layout";
 import ResourceCard from "../components/ResourceCard";
+import { SkeletonCard } from "../components/Skeleton";
 import { useResources } from "../lib/useResources";
 
 const FACULTIES = ["All", "Engineering", "Science", "Management", "Social Sciences", "Agriculture"];
@@ -44,14 +45,14 @@ export default function ResourceListPage({ type, heading, crumb, searchPlacehold
         </div>
       </div>
 
-      {loading && <p className="text-sm text-ink-500">Loading catalog...</p>}
       {error && <p className="text-sm text-rose-ink">{error}</p>}
       {!loading && !error && resources.length === 0 && (
         <p className="text-sm text-ink-500">Nothing here yet. Staff can add resources from Upload Resources.</p>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {resources.map((r, i) => (
+        {loading && Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+        {!loading && resources.map((r, i) => (
           <ResourceCard key={r.id} resource={r} index={i} />
         ))}
       </div>

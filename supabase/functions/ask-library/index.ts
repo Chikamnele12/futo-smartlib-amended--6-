@@ -100,8 +100,21 @@ const STOP = new Set(
     "any all some have has had not but from about into over under than then them they their there here " +
     "please need want find show give tell help get got let make made more most much many very just also " +
     "book books resource resources material materials notes note question questions past pdf ebook ebooks " +
-    "library recommend suggest looking look best good").split(" ")
+    "library recommend suggest looking look best good " +
+    "level levels course courses semester department faculty year class").split(" ")
 );
+
+// "past questions", "ebook", "pdf"... decide which kinds of resource to search
+function detectTypes(text: string): string[] {
+  const t = text.toLowerCase();
+  const out: string[] = [];
+  if (/past\s+question|exam\s+question|\bpq\b/.test(t)) out.push("past_question");
+  if (/revision/.test(t)) out.push("revision_note");
+  if (/\be-?books?\b/.test(t)) out.push("ebook");
+  if (/\bpdfs?\b/.test(t)) out.push("pdf");
+  if (/textbook|academic book/.test(t)) out.push("academic_book");
+  return out;
+}
 
 function keywords(text: string): string[] {
   const lower = text.toLowerCase();
@@ -171,18 +184,31 @@ Deno.serve(async (req) => {
     const select = "id, type, title, author, course_code, department, faculty, level, semester, description, available_copies, total_copies";
     const cols = ["title", "author", "course_code", "department", "faculty", "description"];
 
-    let rows: any[] = [];
+    const types = detectTypes(userText);
+    const personal = /\b(my level|my department|my faculty|for me|my courses?|my year)\b/i.test(userText);
+    const withType = (q: any) => (types.length ? q.in("type", types) : q);
+    const byId = new Map<string, any>();
+    const addRows = (list: any[] | null) => (list ?? []).forEach((r) => byId.set(String(r.id), r));
+
     if (kws.length) {
       const filter = kws.flatMap((k) => cols.map((c) => `${c}.ilike.%${k}%`)).join(",");
-      const { data } = await supabase.from("resources").select(select).or(filter).limit(60);
-      rows = data ?? [];
+      const { data } = await withType(supabase.from("resources").select(select).or(filter)).limit(60);
+      addRows(data);
     }
-    if (!rows.length) {
-      let q = supabase.from("resources").select(select).order("created_at", { ascending: false }).limit(8);
-      if (profile?.department) q = q.ilike("department", `%${String(profile.department).replace(/[%,]/g, "")}%`);
-      const { data } = await q;
-      rows = data ?? [];
+    // "for my level" questions (or nothing found): look at the student's own level and department first
+    if (personal || byId.size === 0) {
+      const level = profile?.level ? String(profile.level).replace(/[%,]/g, "") : "";
+      const dept = profile?.department ? String(profile.department).replace(/[%,]/g, "") : "";
+      const attempts: [string, string][] = [[level, dept], [level, ""], ["", dept], ["", ""]];
+      for (const [lv, dp] of attempts) {
+        let q = withType(supabase.from("resources").select(select)).order("created_at", { ascending: false }).limit(12);
+        if (lv) q = q.ilike("level", `%${lv}%`);
+        if (dp) q = q.ilike("department", `%${dp}%`);
+        const { data } = await q;
+        if (data?.length) { addRows(data); break; }
+      }
     }
+    const rows = [...byId.values()];
 
     const score = (r: any) => {
       let s = 0;
@@ -194,7 +220,8 @@ Deno.serve(async (req) => {
         if (title.includes(k)) s += 3;
         if (rest.includes(k)) s += 1;
       }
-      if (profile?.level && String(r.level ?? "") === String(profile.level)) s += 0.5;
+      if (profile?.level && String(r.level ?? "").includes(String(profile.level))) s += personal ? 1.5 : 0.5;
+      if (personal && profile?.department && String(r.department ?? "").toLowerCase().includes(String(profile.department).toLowerCase())) s += 1;
       return s;
     };
     const top = rows.map((r) => ({ r, s: score(r) })).sort((a, b) => b.s - a.s).slice(0, 8).map((x) => x.r);

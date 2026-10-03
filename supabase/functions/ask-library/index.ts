@@ -1,7 +1,10 @@
 // AI study/library assistant.
 // The browser sends the chat so far; this function finds matching catalog items,
 // hands them to Claude as the only source of truth, and returns the answer.
-// Secrets: supabase secrets set ANTHROPIC_API_KEY=...   (optional: ANTHROPIC_MODEL=...)
+// Secrets (set ONE of these):
+//   GEMINI_API_KEY     -> Google Gemini's free tier (key from aistudio.google.com)
+//   ANTHROPIC_API_KEY  -> Claude (paid, a few cents per hundred questions with Haiku)
+// Optional: GEMINI_MODEL, ANTHROPIC_MODEL, HOURLY_LIMIT. If both keys exist, Gemini (free) is used.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CORS = {
@@ -12,8 +15,77 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-const MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
-const HOURLY_LIMIT = 20;
+const CLAUDE_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
+// Flash-Lite has the most generous free limits; the "-latest" alias keeps working when Google retires old versions
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-lite-latest";
+
+class ModelError extends Error {
+  status: number;
+  constructor(message: string, status: number) { super(message); this.status = status; }
+}
+
+async function askClaude(key: string, system: string, history: { role: string; content: string }[]): Promise<string> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 700, system, messages: history }),
+  });
+  if (!res.ok) {
+    console.error("Anthropic error", res.status, await res.text());
+    throw new ModelError("claude", res.status);
+  }
+  const out = await res.json();
+  return (out?.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
+}
+
+async function askGemini(key: string, system: string, history: { role: string; content: string }[]): Promise<string> {
+  // Gemini wants alternating user / model turns
+  const contents: { role: string; parts: { text: string }[] }[] = [];
+  for (const m of history) {
+    const role = m.role === "assistant" ? "model" : "user";
+    const last = contents[contents.length - 1];
+    if (last && last.role === role) last.parts[0].text += "\n" + m.content;
+    else contents.push({ role, parts: [{ text: m.content }] });
+  }
+
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents,
+    generationConfig: {
+      maxOutputTokens: 2000,
+      temperature: 0.4,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          answer: { type: "STRING" },
+          used: { type: "ARRAY", items: { type: "INTEGER" } },
+        },
+        required: ["answer", "used"],
+      },
+    },
+  });
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": key },
+      body,
+    });
+    // free keys share per-minute limits across all students: wait a moment and try once more
+    if (res.status === 429 && attempt === 0) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+    if (!res.ok) {
+      console.error("Gemini error", res.status, await res.text());
+      throw new ModelError("gemini", res.status);
+    }
+    const out = await res.json();
+    const parts = out?.candidates?.[0]?.content?.parts ?? [];
+    return parts.map((p: any) => p.text ?? "").join("").trim();
+  }
+  throw new ModelError("gemini", 429);
+}
+const HOURLY_LIMIT = Number(Deno.env.get("HOURLY_LIMIT") ?? "15");
 
 const TYPE_LABEL: Record<string, string> = {
   academic_book: "Academic Book",
@@ -50,8 +122,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) return json({ error: "The assistant is not set up yet." }, 503);
+    const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!claudeKey && !geminiKey) return json({ error: "The assistant is not set up yet." }, 503);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
@@ -88,7 +161,7 @@ Deno.serve(async (req) => {
     // ---- student context ----
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name, level, department")
+      .select("level, department")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -137,7 +210,7 @@ Deno.serve(async (req) => {
       : "(no matching items found)";
 
     const system = `You are SmartLib Assistant, the helper inside the FUTO SmartLib digital library at the Federal University of Technology, Owerri.
-The student is ${profile?.full_name ?? "a student"}, level ${profile?.level ?? "unknown"}, department ${profile?.department ?? "unknown"}.
+The student is at level ${profile?.level ?? "unknown"}, department ${profile?.department ?? "unknown"}.
 
 Rules:
 - Recommend ONLY items from the CATALOG RESULTS below. Never invent titles, authors, course codes or availability.
@@ -151,18 +224,15 @@ Reply with JSON only, no other text: {"answer": "<text for the student>", "used"
 CATALOG RESULTS:
 ${catalog}`;
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 700, system, messages: history }),
-    });
-    if (!res.ok) {
-      console.error("Anthropic error", res.status, await res.text());
+    let text = "";
+    try {
+      text = geminiKey ? await askGemini(geminiKey, system, history) : await askClaude(claudeKey!, system, history);
+    } catch (err) {
+      if (err instanceof ModelError && err.status === 429) {
+        return json({ error: "The AI service is busy right now. Please try again in a minute." }, 429);
+      }
       return json({ error: "The assistant is unavailable right now. Please try again." }, 502);
     }
-
-    const out = await res.json();
-    const text: string = (out?.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
 
     let answer = text;
     let used: number[] = [];

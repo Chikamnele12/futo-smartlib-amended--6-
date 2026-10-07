@@ -61,9 +61,15 @@ export default function BorrowedItems() {
     load();
   }
 
-  async function deleteRecord(id) {
-    if (!confirm("Delete this borrow record?")) return;
-    await supabase.from("borrowed_items").delete().eq("id", id);
+  async function deleteRecord(item) {
+    const msg = item.status === "borrowed"
+      ? "Delete this borrow record?\n\nThe book is still marked as borrowed, so one copy will be put back in stock."
+      : "Delete this borrow record?";
+    if (!confirm(msg)) return;
+    setActionError("");
+    const { data, error } = await supabase.from("borrowed_items").delete().eq("id", item.id).select("id");
+    if (error) setActionError(error.message);
+    else if (!data || data.length === 0) setActionError("Could not delete this record. Your account doesn't have permission to delete loans yet.");
     load();
   }
 
@@ -167,7 +173,7 @@ export default function BorrowedItems() {
                       </button>
                     )}
                     {isStaff && (
-                      <button onClick={() => deleteRecord(item.id)} className="flex items-center gap-1.5 text-xs border border-paper-300 text-rose-ink rounded-md px-3 py-2 hover:bg-paper-100 transition-colors">
+                      <button onClick={() => deleteRecord(item)} className="flex items-center gap-1.5 text-xs border border-paper-300 text-rose-ink rounded-md px-3 py-2 hover:bg-paper-100 transition-colors">
                         <Trash2 size={13} /> Delete
                       </button>
                     )}

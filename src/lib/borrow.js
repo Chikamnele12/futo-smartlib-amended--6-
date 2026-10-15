@@ -1,7 +1,7 @@
 import { supabase } from "./supabaseClient";
 
 export const PENALTY_PER_DAY = 500; // ₦500 per day overdue
-export const BORROW_DAYS = 14; // default AND maximum loan length (database policy allows up to 15 days)
+export const BORROW_DAYS = 8; // default AND maximum loan length (database policy allows up to 9 days)
 export const MAX_BORROW_DAYS = BORROW_DAYS;
 
 // "YYYY-MM-DD" in the user's LOCAL time (toISOString would shift it to UTC).
